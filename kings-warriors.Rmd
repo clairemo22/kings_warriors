@@ -1,0 +1,563 @@
+---
+title: "kings-warriors"
+output: html_document
+date: "2023-04-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(BasketballAnalyzeR)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(sjPlot)
+library(ggrepel)
+```
+
+```{r}
+sac_gsw<- fread("/Users/claire/Documents/Script//NBA Stats 202223 All Stats  NBA Player Props Tool.csv", header=T, data.table=F)
+head(sac_gsw)
+colnames(sac_gsw)
+```
+
+variables are:
+
+- MPG: minutes per game
+
+- USG%: Usage rate, a.k.a., usage percentage is an estimate of the percentage of team plays used by a player while he was on the floor
+
+- TO%: A metric that estimates the number of turnovers a player commits per 100 possessions
+
+- eFG%: With eFG%, three-point shots made are worth 50% more than two-point shots made. eFG% Formula=(FGM+ (0.5 x 3PM))/FGA
+
+- TS%: True shooting percentage is a measure of shooting efficiency that takes into account field goals, 3-point field goals, and free throws
+
+- PPG: Points per game
+
+- RPG: Rebounds per game
+
+- APG: Assists per game
+
+- SPG: Steals per game
+
+- BPG: Blocks per game
+
+- TPG: Turnovers per game
+
+- VI: The versatility index is a metric that measures a player’s ability to produce in points, assists, and rebounds. The average player will score around a five on the index, while top players score above 10
+
+- ORTG: Individual offensive rating is the number of points produced by a player per 100 total individual possessions
+
+- DRTG: Individual defensive rating estimates how many points the player allowed per 100 possessions he individually faced while staying on the court.
+
+
+```{r}
+sac_gsw$TEAM[sac_gsw$TEAM=="Gol"]<- "Warriors"
+sac_gsw$TEAM[sac_gsw$TEAM=="Sac"]<- "Kings"
+
+colors<- c("Kings"="purple3", "Warriors"="goldenrod1")
+```
+
+the average age of the warriors is only 2 years older than the kings
+
+```{r}
+tapply(sac_gsw$AGE, sac_gsw$TEAM, mean)
+```
+
+### plot basic statistics 
+
+```{r}
+ggplot(sac_gsw, aes(x = reorder(NAME, -PPG), y=PPG, fill = TEAM))+
+  geom_bar(stat="identity")+
+  labs(title="Average points per game")+
+  xlab("Player")+
+  theme_minimal()+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))+
+  scale_fill_manual(values = colors)
+```
+
+not surprisingly steph has the highest PPG, followed by fox, klay and poole.
+
+```{r}
+ppg<- lm(PPG~TEAM, data=sac_gsw)
+tab_model(ppg)
+```
+
+```{r}
+ggplot(sac_gsw, aes(x = reorder(NAME, -TPG), y=TPG, fill = TEAM))+
+  geom_bar(stat="identity")+
+  labs(title="Average turnovers per game")+
+  xlab("Player")+
+  theme_minimal()+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))+
+  scale_fill_manual(values = colors)
+```
+```{r}
+tpg<- lm(TPG~TEAM, data=sac_gsw)
+tab_model(tpg)
+```
+
+steph and poole also have a lot of turnovers per game, but they are handling the ball a lot. there is no significant difference in turnovers per game between kings and warriors players.
+
+```{r}
+ggplot(sac_gsw, aes(x = reorder(NAME, DRtg), y=DRtg, fill = TEAM))+
+  geom_bar(stat="identity")+
+  labs(title="Average defensive rating per game")+
+  xlab("Player")+
+  theme_minimal()+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))+
+  scale_fill_manual(values = colors)
+```
+```{r}
+drg<- lm(DRtg~TEAM, data=sac_gsw)
+tab_model(drg)
+```
+
+interestingly, defensive rating is pretty similar for almost everyone. a higher defense rating means that player is allowing more points per position. the players who then have the best are probably just playing fewer minutes by looking at this. there is no significant difference in defensive rating between the kings and warriors. 
+
+```{r}
+ggplot(sac_gsw, aes(x = reorder(NAME, -ORtg), y=ORtg, fill = TEAM))+
+  geom_bar(stat="identity")+
+  labs(title="Average offensive rating per game")+
+  xlab("Player")+
+  theme_minimal()+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))+
+  scale_fill_manual(values = colors)
+```
+
+```{r}
+org<- lm(ORtg~TEAM, data=sac_gsw)
+tab_model(org)
+```
+
+offensive rating is higher by bench players as well -- probably due to number of minutes? not sure if it is conditioned on minutes. there is no significant difference in offensive rating between the kings and warriors either.  
+
+```{r}
+ggplot(sac_gsw, aes(x = reorder(NAME, -VI), y=VI, fill = TEAM))+
+  geom_bar(stat="identity")+
+  labs(title="Average versatility index per game")+
+  xlab("Player")+
+  theme_minimal()+
+  geom_hline(yintercept = 10, color="red", linetype="dashed", size=1)+
+  geom_hline(yintercept = 5, color="black", linetype="dashed", size=1)+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))+
+  scale_fill_manual(values = colors)
+```
+
+versatility index is a measure of a player’s ability to produce in points, assists, and rebounds. The average player will score around a five on the index, while top players score above 10. the plot shows these two teams have 3 "top" players -- Sabonis, Steph and Fox. Could the Kings having 2 top players be the difference maker? Almost all have an above average VI, so not sure how reliable this is, or if it needs to be conditioned on something else. 
+
+either way, Sabonis has the highest VI, which make make sense given the range of positions he plays and things he's being asked to do. 
+
+### bivariate distributions
+
+this plot shows minutes per game (MPG) on the x axis and usage per game (USG%) on the y axis. it is indended to show players who might play a lot, but aren't really used. I highlighed some who play more than 20 minutes per game but their usage percentage is less than 20%.
+
+those players might be considered inefficient, but I'm not totally sure if it factors in defense, or is just based on offenseive rating.
+
+some notables are keegan, draymond, barnes and heurter. the average usage percentage per game for the Kings = 17.6% and for the Warriors = 19.3%, so all those highlighted players are still just slightly below their team averages. however, the warriors seem to be slightly better at "using" their players
+
+```{r}
+tapply(sac_gsw$`USG%`, sac_gsw$TEAM, mean)
+
+sac_gsw$labs<- ifelse(sac_gsw$MPG>20 & sac_gsw$`USG%`<20, sac_gsw$NAME, NA)
+
+ggplot(sac_gsw, aes(x=MPG, y=`USG%`, color=TEAM)) + 
+    geom_point(size=3)+
+    scale_color_manual(values = colors)+
+  geom_label_repel(aes(label = sac_gsw$labs))
+
+```
+
+this plot shows average defensive rating (DRtg) on the x axis and average offensive rating (ORrtg) on the y axis, and highlights anyone who is above 130 on ORrtg or above 115 on DRtg. 
+
+Harrison Barnes seems to be the best at both offense and defense!
+
+```{r}
+sac_gsw$labs<- ifelse(sac_gsw$ORtg>130 | sac_gsw$DRtg>115, sac_gsw$NAME, NA)
+
+
+ggplot(sac_gsw, aes(x=DRtg, y=ORtg, color=TEAM)) + 
+    geom_point(size=3)+
+    scale_color_manual(values = colors)+
+  geom_label_repel(aes(label = sac_gsw$labs))
+```
+
+this graph shows points per game by position. guards are scoring the most points, not surprisingly. here we can see perhaps both teams tend to lack good offense out of the center. 
+
+```{r}
+ggplot(sac_gsw, aes(x=PPG, y=POS, color=TEAM)) + 
+    geom_point(size=3)+
+    scale_color_manual(values = colors)+
+  geom_label_repel(aes(label = NAME))
+```
+
+
+### profile analysis
+
+the following analysis uses a machine learning algorithm to create profiles based on each player for the kings and warriors separately.
+
+the analysis for the Kings shows two profiles (1 and 5) that include players who tend to get a lot of minutes per game. in cluster 1, those players get a lot of minutes (above average) and also have above average points per game, steals per game, assists per game and overall better offensive and defensive ratings. cluster 5, on the other hand, has players with above average minutes per game, higher points, steals, assists and rebounds per game, but also lower defensive ratings per game.
+
+there is also a cluster (2) of players who do not get many minutes per game but have a lot of turnovers. cluster 6 shows players who seem to come off the bench and only shoot three pointers. cluster 4 appears to be just overall solidly average players in almost every area -- not hurting the team too much. 
+
+if we look at the chart that plots defensive rating by offensive rating per game, with size indicating minutes per game and color indicating cluster, we see the starters are  almost all in cluster 1! Sabonis is in cluster 5, indicating he plays a bit worse of defense than the other starters. Alex Len is in cluster 2 (lots of TOs) and Dellavedova is our shooter off the bench. Interestingly, almost all the mid-level bench players are in cluster 4, meaning our bench doesn't seem to hurt us too much, but aren't necessarily playing above average offense. this is really well evidenced by seeing how our starters are mostly in the first quadrant (positive-positive), and the mid-level bench guys in cluster 4 mostly cluster around the origin.
+
+```{r}
+set.seed(2023)
+
+kings<- sac_gsw %>% filter(TEAM=="Kings") %>% 
+  select(`TO%`, `2P%`, `3P%`, RPG, APG, SPG, PPG, DRtg, ORtg, MPG) %>%
+    rename(TO=`TO%`,
+         PT2=`2P%`,
+         PT3=`3P%`,
+         Def=DRtg,
+         Off= ORtg)
+
+clusITEMS<- na.omit(kings)
+kclu1<-kclustering(clusITEMS)
+plot(kclu1)
+
+clu_dat<- sac_gsw %>% filter(TEAM=="Kings") %>% 
+  select(NAME, `TO%`, `2P%`, `3P%`, RPG, APG, SPG, PPG, DRtg, ORtg, MPG) %>%
+  rename(TO=`TO%`,
+         PT2=`2P%`,
+         PT3=`3P%`,
+         Def=DRtg,
+         Off=ORtg)
+
+clu_dat<- na.omit(clu_dat)
+kclu2<-kclustering(clusITEMS, labels = clu_dat$NAME, k=6)
+
+plot(kclu2)
+
+cluster <- data.frame(kclu2$Subjects)
+clu_dat<- merge(clu_dat, cluster, by.x="NAME", by.y="Label")
+
+Xbubble_kings <- data.frame(Player=clu_dat$NAME, Off=clu_dat$Off,
+                      Def=clu_dat$Def, cluster=as.factor(clu_dat$Cluster),
+                      MINs=clu_dat$MPG)
+
+labs <- c("Offensive rating", "Defensive rating", "Cluster", "Minutes per game")
+bubbleplot(Xbubble_kings, id="Player", x="Off", y="Def", col="cluster", size="MINs", labels=labs)
+
+
+
+
+```
+
+the warriors clusters with higher minutes per game are 1 and 4. cluster 1 is players with above average minutes who tend to have decent defense, higher points per game, steals per game, assists per game and rebounds. whereas cluster 4 seems like people who are better rebounders and despite not scoring a ton (less than average points per game) they have a high offensive rating? they seem to never shoot threes, relative to the other warriors players. 
+
+the warriors also have a cluster with people who play few minutes but have a lot of turnovers. cluster 4 looks funny too-- great defense, but lots of turnovers, and can *only* shoot 3s.
+
+the starters all seem to be in cluster 1, and kevon looney is in cluster 4 (rebounder with high offensive rating). however, he's the only person in cluster 4, just as Iguodala is the only person in cluster 2 (high turnover average but decent 2 point average), so this is a good lesson in probably too little data. the bubble plot with offensive and defensive rating is interesting in comparison to the plot for the kings. we know the warriors are a good team -- but they don't really seem to have players that are "standing out" above average in the first quadrant, as the kings do. instead, they have a lot of guys who cluster around the origin, which could be great for the longevity of the team and a playoff run, but might also get them into trouble.  
+
+```{r}
+set.seed(2023)
+
+warriors<- sac_gsw %>% filter(TEAM=="Warriors") %>% 
+  select(`TO%`, `2P%`, `3P%`, RPG, APG, SPG, PPG, DRtg, ORtg, MPG)%>%
+  rename(TO=`TO%`,
+         PT2=`2P%`,
+         PT3=`3P%`,
+         Def=DRtg,
+         Off= ORtg)
+
+clusITEMS<- na.omit(warriors)
+kclu1<-kclustering(clusITEMS)
+plot(kclu1)
+
+clu_dat<- sac_gsw %>% filter(TEAM=="Warriors") %>% 
+  select(NAME, `TO%`, `2P%`, `3P%`, RPG, APG, SPG, PPG, DRtg, ORtg, MPG)%>%
+  rename(TO=`TO%`,
+         PT2=`2P%`,
+         PT3=`3P%`,
+         Def=DRtg,
+         Off= ORtg)
+
+clu_dat<- na.omit(clu_dat)
+kclu2<-kclustering(clusITEMS, labels = clu_dat$NAME, k=6)
+
+plot(kclu2)
+
+cluster <- data.frame(kclu2$Subjects)
+clu_dat<- merge(clu_dat, cluster, by.x="NAME", by.y="Label")
+
+Xbubble_dubs <- data.frame(Player=clu_dat$NAME, Off=clu_dat$Off,
+                      Def=clu_dat$Def, cluster=as.factor(clu_dat$Cluster),
+                      MINs=clu_dat$MPG)
+
+labs <- c("Offensive rating", "Defensive rating", "Cluster", "Minutes per game")
+bubbleplot(Xbubble_dubs, id="Player", x="Off", y="Def", col="cluster", size="MINs", labels=labs)
+
+```
+### mid series update
+
+two games in, here is the advanced sports data:
+
+```{r}
+kings<- fread("/Users/claire/Documents/Script//kings_2games.csv", header=T, data.table=F)
+warriors<- fread("/Users/claire/Documents/Script//warriors_2games.csv", header=T, data.table=F)
+
+kings$TEAM<- "Kings"
+warriors$TEAM<- "Warriors"
+sac_gsw2<- rbind(kings, warriors)
+```
+
+average efficiency field goal % through the first two games
+
+For eFG%, three-point shots made are worth 50% more than two-point shots made. eFG% Formula=(FGM+ (0.5 x 3PM))/FGA. At least for the Kings the efficiency % isn't too surprising to me, given our starters hadn't been shooting great from 3. Steph and Klay have been still shooting at a pretty high clip, not so surprising either. 
+
+```{r}
+ggplot(sac_gsw2, aes(x = reorder(Player, -`eFG%`), y=`eFG%`, fill = TEAM))+
+  geom_bar(stat="identity")+
+  labs(title="Efficiency field goal percentage per game, through 2 playoff games")+
+  xlab("Player")+
+  theme_minimal()+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))+
+  scale_fill_manual(values = colors)
+```
+
+I was curious to see who was being used most or least throughout 2 games. The most interesting is perhaps Keegan, as we've noticed his minutes fall. Throughout the season his usage % was around 16%, and has fallen below 10 through two games. That's not to say he can't still make an impact-- but perhaps isn't as ready for the playoffs. 
+
+```{r}
+ggplot(sac_gsw2, aes(x = reorder(Player, -`USG%`), y=`USG%`, fill = TEAM))+
+  geom_bar(stat="identity")+
+  labs(title="Usage rate per game, through 2 playoff games")+
+  xlab("Player")+
+  theme_minimal()+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))+
+  scale_fill_manual(values = colors)
+```
+
+
+plotting offensive and defensive rating for just the first two games of the playoffs:
+
+The Kings don't have as a high of a defensive rating average as I might have expected given how many points they had off steals. The average defensive rating for the Warriors was 116.8 through 2 games, and only 113.2 for the Kings. Similarly, the Warriors have had a higher offensive rating per game (116.8 vs 101.7). Compared to the bubble plot from the full season, the Kings don't have any starters in the first quadrant (above average defense and offense). Our starters are mostly all in the 4th quadrant (4th quarter fox lol) meaning they have above average offense but lower than average defense. 
+
+```{r}
+tapply(sac_gsw2$ORtg, sac_gsw2$TEAM, mean, na.rm=T)
+tapply(sac_gsw2$DRtg, sac_gsw2$TEAM, mean, na.rm=T)
+
+kings<- sac_gsw2 %>% filter(TEAM=="Kings")
+
+ggplot(kings, aes(x=ORtg, y=DRtg, color=TEAM, size=MP)) + 
+    geom_point(size=3)+
+      scale_color_manual(values = colors)+
+  geom_label_repel(aes(label = Player))+
+  geom_hline(yintercept = mean(kings$DRtg, na.rm=T), color="black", linetype="dotdash", size=1)+
+    geom_vline(xintercept = mean(kings$ORtg, na.rm=T), color="black", linetype="dotdash", size=1)
+
+```
+
+The warriors on the other hand have most of their starters in quadrant 2 (above average defense but below average offense). This is interesting! I am curious what is really predicting the Kings' wins if the Warriors have statistically better offensive and defensive ratings compared to the Kings through 2 games. Maybe it is really that their best players (starters) just aren't performing as well as they should be. 
+
+```{r}
+warriors<- sac_gsw2 %>% filter(TEAM=="Warriors")
+
+ggplot(warriors, aes(x=ORtg, y=DRtg, color=TEAM, size=MP)) + 
+    geom_point(size=3)+
+      scale_color_manual(values = colors)+
+  geom_label_repel(aes(label = Player))+
+  geom_hline(yintercept = mean(warriors$DRtg, na.rm=T), color="blue1", linetype="dotdash", size=1)+
+    geom_vline(xintercept = mean(warriors$ORtg, na.rm=T), color="blue1", linetype="dotdash", size=1)
+
+```
+
+## mid series update 2: a race to 2
+
+after a rough 2 game stretch in San Francisco, the series is tied 2-2, effectively letting us start over. the two away games were not necessarily rough in the sense of blow outs, but were definitely winable games for the Kings. It would have been seemingly almost everything to steal a game at the Chase center (and we still could!) but are going to need to win essentially win out at home as well.
+
+Either way, it's still been an amazing series and the Kings have still accomplished so much this season <smiling thru the pain>.
+
+
+for this update, I'm going to look at the "basic" statistics through 4 games. Specifically, I want to see who is over/under performing based on shooting percentages etc averaged during the season
+
+
+```{r}
+kings4<- fread("/Users/claire/Documents/Script/kings_4games.csv", header=T, data.table=F)
+warriors4<- fread("/Users/claire/Documents/Script/warriors_4games.csv", header=T, data.table=F)
+
+```
+
+the column names don't necessarily all align... so we'll look at 3 PT%, FT%, assists per game, turn overs per game and points per game
+
+```{r}
+colnames(sac_gsw)
+colnames(kings4)
+
+
+
+kings_avg<- sac_gsw %>% filter(TEAM=="Kings") %>%
+  select(NAME, `FT%`, `3P%`, PPG, APG, TPG) %>%
+  rename(Player=NAME)%>%
+  mutate(Statistic="Season average")
+kings_series<- kings4 %>% select(Player, `FT%`, `3P%`, PTS, AST, TOV) %>%
+  rename(PPG=PTS,
+         APG=AST,
+         TPG=TOV) %>%
+  mutate(Statistic="Series average")
+
+head(kings_avg)
+head(kings_series)
+
+kings_comp<- rbind(kings_avg, kings_series)
+
+kings_comp<- kings_comp %>% group_by(Player) %>%
+  mutate(diff_ppg=PPG[2]-PPG[1],
+         diff_3P= `3P%`[2]-`3P%`[1],
+         diff_APG= APG[2]-APG[1],
+         diff_TPG=TPG[2]-TPG[1]) ### series minus season
+
+```
+
+
+points per game
+
+```{r}
+kings_comp$color<- ifelse(kings_comp$diff_ppg>0, "green", "red")
+
+
+ggplot(kings_comp, aes(x = PPG, y = reorder(Player, diff_ppg), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("forestgreen", "red"))+
+  geom_line() +
+  ggtitle("Difference in average points per game for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("Points per game")
+```
+
+3 point %
+
+```{r}
+kings_comp$color<- ifelse(kings_comp$diff_3P>0, "green", "red")
+
+
+ggplot(kings_comp, aes(x = `3P%`, y = reorder(Player, diff_3P), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("forestgreen", "red"))+
+  geom_line() +
+  ggtitle("Difference in average 3 point percentage for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("3 point percentage per game")
+```
+
+assists per game
+
+```{r}
+kings_comp$color<- ifelse(kings_comp$diff_APG>0, "green", "red")
+
+
+ggplot(kings_comp, aes(x = APG, y = reorder(Player, diff_APG), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("forestgreen", "red"))+
+  geom_line() +
+  ggtitle("Difference in average assists per game for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("Assists per game")
+```
+
+turnovers per game
+
+```{r}
+kings_comp$color<- ifelse(kings_comp$diff_TPG>0, "green", "red")
+
+
+ggplot(kings_comp, aes(x = TPG, y = reorder(Player, -diff_TPG), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("red", "forestgreen"))+
+  geom_line() +
+  ggtitle("Difference in average turnovers per game for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("Turnovers per game")
+```
+
+for the warriors:
+
+```{r}
+warrors_avg<- sac_gsw %>% filter(TEAM=="Warriors") %>%
+  select(NAME, `FT%`, `3P%`, PPG, APG, TPG) %>%
+  rename(Player=NAME)%>%
+  mutate(Statistic="Season average")
+warriors_series<- warriors4 %>% select(Player, `FT%`, `3P%`, PTS, AST, TOV) %>%
+  rename(PPG=PTS,
+         APG=AST,
+         TPG=TOV) %>%
+  mutate(Statistic="Series average")
+
+warriors_comp<- rbind(warrors_avg, warriors_series)
+
+warriors_comp<- warriors_comp %>% group_by(Player) %>%
+ mutate(diff_ppg=PPG[2]-PPG[1],
+         diff_3P= `3P%`[2]-`3P%`[1],
+         diff_APG= APG[2]-APG[1],
+         diff_TPG=TPG[2]-TPG[1]) ### series minus season
+```
+
+points per game
+
+```{r}
+warriors_comp$color<- ifelse(warriors_comp$diff_ppg>0, "green", "red")
+
+
+ggplot(warriors_comp, aes(x = PPG, y = reorder(Player, diff_ppg), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("forestgreen", "red"))+
+  geom_line() +
+  ggtitle("Difference in average points per game for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("Points per game")
+```
+
+3 point %
+
+```{r}
+warriors_comp$color<- ifelse(warriors_comp$diff_3P>0, "green", "red")
+
+
+ggplot(warriors_comp, aes(x = `3P%`, y = reorder(Player, diff_3P), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("forestgreen", "red"))+
+  geom_line() +
+  ggtitle("Difference in average 3 point percentage for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("3 point percentage per game")
+```
+
+assists per game
+
+```{r}
+warriors_comp$color<- ifelse(warriors_comp$diff_APG>0, "green", "red")
+
+
+ggplot(warriors_comp, aes(x = APG, y = reorder(Player, diff_APG), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("forestgreen", "red"))+
+  geom_line() +
+  ggtitle("Difference in average assists per game for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("Assists per game")
+```
+
+turnovers per game
+
+```{r}
+warriors_comp$color<- ifelse(warriors_comp$diff_TPG>0, "green", "red")
+
+
+ggplot(warriors_comp, aes(x = TPG, y = reorder(Player, -diff_TPG), col= factor(color), group=Player)) +
+  geom_point(aes(shape=Statistic))  +
+  scale_colour_manual(values = c("red", "forestgreen"))+
+  geom_line() +
+  ggtitle("Difference in average turnovers per game for season vs series")+
+  ylab("") +
+  guides(colour = "none")+
+  xlab("Turnovers per game")
+```
